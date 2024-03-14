@@ -2,11 +2,11 @@
 title: "Exercise-0"
 author: "Jessica Quansah"
 date: "2024-03-14"
-output: pdf_document
+output: md_document
 ---
 
 
-```{r}
+```r
 library(tidyverse)
 library(igraph)
 ```
