@@ -1,13 +1,12 @@
 ---
-title: "Exercise-0"
+title: "hello-ona"
 author: "Jessica Quansah"
 date: "2024-03-14"
-output: md_document
+output: pdf_document
 ---
 
 ```{r}
 library(tidyverse)
 library(igraph)
 ```
-
 Hello Network!
