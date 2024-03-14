@@ -1,5 +1,3 @@
-# Welcome to GitHub Desktop!
+# GitHub for Organizational Network Assignments!
 
-This is your README. READMEs are where you can communicate what your project is and how to use it.
-
-Write your name on line 6, save it, and then head back to GitHub Desktop.
+Course Description: Organizational network analysis provides tools to measure and analyze relationships among entities including individuals, units, and entire firms. Outcomes critical for Talent Management such as hiring, promotion and turnover are critically and intricately tied with individual’s social networks. A firm’s ability to survive, adapt and innovate depends on its location within its network of firms. This course provides an overview of social network analysis (SNA) concepts and methods specifically relevant for understanding and managing organizations. 
