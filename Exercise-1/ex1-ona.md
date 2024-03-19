@@ -58,6 +58,27 @@ connections <- read_csv("Connections_JessicaQuansah.csv", skip = 3)
 connections <- connections %>%
   drop_na(`First Name`, Company)
 
+#Get the count of your contacts by their current employer + total count
+table1<-connections %>% count(Company)
+print(table1)
+```
+
+    ## # A tibble: 540 × 2
+    ##    Company                                                 n
+    ##    <chr>                                               <int>
+    ##  1 1st Armored Division                                    1
+    ##  2 360dialog — official WhatsApp Business API Provider     1
+    ##  3 3H ENGINEERING AND CONSTRUCTION                         1
+    ##  4 8 80  Cities                                            1
+    ##  5 9.O The Underground Radio                               1
+    ##  6 9to5                                                    1
+    ##  7 AHC Appliances                                          1
+    ##  8 AJ Bell                                                 1
+    ##  9 AJS                                                     1
+    ## 10 AKOFENA RENTALS LIMITED                                 1
+    ## # ℹ 530 more rows
+
+``` r
 # Create unique identifiers for nodes
 connections <- connections %>%
   mutate(id = paste(substr(`First Name`, 1, 3), substr(`Last Name`, 1, 3), row_number(), sep = ""))
