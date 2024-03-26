@@ -1,0 +1,64 @@
+---
+title: "ex2-ona"
+author: "Jessica Quansah"
+date: "2024-03-26"
+output:
+  pdf_document: default
+  md_document: default
+---
+
+## Load Data
+
+```{r}
+library(tidygraph)
+library(igraph)
+library(readr)
+library(ggraph)
+library(ggplot2)
+edges <- read_csv("C:/Users/tobuy/OneDrive/Documents/GitHub/desktop-tutorial/Exercise-2/ex2_edges.csv")
+nodes <- read_csv("C:/Users/tobuy/OneDrive/Documents/GitHub/desktop-tutorial/Exercise-2/ex2_nodes.csv")
+
+# Create graph
+g <- tbl_graph(nodes = nodes, edges = edges, directed = FALSE)
+
+# Calculate degree centrality for nodes
+g <- g %>% 
+  activate(nodes) %>%
+  mutate(degree = centrality_degree())
+
+# Calculate closeness centrality for nodes
+g <- g %>% 
+  activate(nodes) %>%
+  mutate(closeness = centrality_closeness())
+
+# Calculate betweenness centrality
+g <- g %>% 
+  activate(nodes) %>%
+  mutate(betweenness = centrality_betweenness())
+print(g)
+
+# Plot the graph
+graph_plot <- g %>%
+  ggraph(layout = 'kk') +
+  geom_edge_link() +
+  geom_node_point(aes(size = closeness, colour = degree)) +
+  scale_color_continuous(guide = 'legend') +
+  geom_node_text(aes(label = seat), size = 3) +  # Add seat names as labels inside nodes
+  geom_node_text(aes(label = round(betweenness, 2)), vjust = -1, size = 3) + # Add betweenness centrality inside nodes
+  theme_graph(base_family = "Helvetica")
+
+graph_plot
+
+```
+
+
+##Discussion
+
+
+The objective was to select a seat (A-D) on the Fakebook Employee bus that would facilitate the development of informal connections with my co-workers. To accomplish this, I wanted a seat that not only allowed for interactions with a larger number of individuals (degree centrality), but also one that maximized my betweenness and closeness centrality. In light of these criteria, I chose seat B.
+
+Seat B offered several advantages in terms of optimizing my network centrality. It has a high degree centrality, enabling direct engagement with multiple individuals. Moreover, it excelled in both betweenness and closeness centrality. This meant that seat B acted as a bridge, connecting individuals who may not have had direct connections with one another, thereby enhancing my influence and facilitating the flow of information within the network.
+
+Although seat A exhibited a higher betweenness centrality due to its direct connection to seat B, it had a lower degree centrality. Nevertheless, I believed I could still leverage the betweenness centrality advantage of seat A by utilizing my  direct connection to that seat.
+
+Nonetheless Seat B could also be disadvantageous if someone I do not have any "direct" access like the person in seat 1 was a person of influence who did not like to interact with outsiders (i.e. kept his circle type) As such by prioritizing degree centrality as well, I may have missed out on an opportunity to develop that connection. Similarly, this seat may also not be helpful in developing deep connections because my access is so open so I may tend to have general conversations that involve everyone rather than truly getting to know someone and developing a deep connection with them.
