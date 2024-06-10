@@ -1,0 +1,212 @@
+---
+title: "ex-3- ona"
+author: "Jessica Quansah"
+date: "2024-04-02"
+output:
+  pdf_document: default
+  md_document: default
+---
+
+Load libraries needed
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(arrow)
+library(tidygraph)
+library(igraph)
+library(readr)
+library(ggraph)
+library(igraph)
+library(ggplot2)
+```
+
+Load cleaned up datasets from the starter code provided
+
+```{r load-data}
+data_path = "~/GitHub/desktop-tutorial/Exercise-3/"
+edges <- read_csv(paste0(data_path,"edges.csv"))
+application <- read_csv(paste0(data_path,"cleaned_applications.csv"))
+```
+
+## Picking Workgroups and Visualizing Demographics
+
+From the data description provided, only 4 of the 9 Technology Centers comprising the agency are included: 1600, 1700, 2100 and 2400. As such I would pick one owrkgroup from each center to allow for some variety. 1600 - Biotechnology and 1700- Materials and Chemical Engineering.
+
+First we will create a column for the workgroup by extracting the first 3 digits. Then we will get the counts per work group in order to pick the one that will give us a good number of data points
+
+```{r workgroups}
+# Extract first three digits of the 4-digit column
+application$workgroup <- substr(application$examiner_art_unit, 1, 3)
+
+# Count occurrences of each unique 3-digit code
+wgcounts <- table(application$workgroup)
+
+# Print the counts
+print(wgcounts)
+```
+
+Just based on observation I am going to pick 165 and 171. I wanted both groups to have similar amount of people. I will now filter the rest of the groups
+
+```{r workgroups1}
+app_subset <- subset(application, workgroup %in% c("165", "171"))
+app_subset <- app_subset[!is.na(app_subset$gender), ]
+```
+
+## Summary Statistics
+
+```{r pressure, echo=FALSE}
+library(ggplot2)
+
+# Plot distribution of gender for each working group
+ggplot(app_subset, aes(x = gender, fill = gender)) +
+               geom_bar() +
+               facet_wrap(~ workgroup) +
+               labs(title = "Distribution of Gender by Working Group",
+                    x = "Gender",
+                    y = "Count") +
+               scale_fill_manual(values = c("blue", "pink")) +
+               theme_minimal()
+
+# Plot distribution of race for each working group
+ggplot(app_subset, aes(x = race, fill = race)) +
+             geom_bar() +
+             facet_wrap(~ workgroup) +
+             labs(title = "Distribution of Race by Working Group",
+                  x = "Race",
+                  y = "Count")  +
+             theme_minimal()
+
+#Plot race and gender together
+ggplot(app_subset, aes(x = race, fill = gender)) +
+  geom_bar(position = "dodge", stat = "count") +
+  facet_wrap(~ workgroup, scales = "free") +
+  labs(title = "Race Distribution per Gender by Working Group",
+       x = "Race",
+       y = "Count") +
+  theme_minimal()
+
+
+```
+We can see that in the working group 165, there are more white females whereas in workgroup 171, the dominant race is white males. There are no balck females in working group 165. Separately in both groups the most popular gender is male and the most popular race is white.
+
+Lets look at other summary statistics
+
+```{r}
+
+# Calculate summary statistics by working group
+summary_stats <- app_subset %>%
+  group_by(workgroup) %>%
+  summarise(mean_tenure = mean(tenure_days, na.rm = TRUE),
+            median_tenure = median(tenure_days, na.rm = TRUE),
+            sd_tenure = sd(tenure_days, na.rm = TRUE),
+            .groups = "drop")
+
+
+# Calculate summary statistics by gender and race within each working group
+summary_stats_gender_race <- app_subset %>%
+  group_by(workgroup, gender, race) %>%
+  summarise(count = n(),  # Count of observations
+            mean_tenure = mean(tenure_days, na.rm = TRUE),  # Mean age
+            median_tenure = median(tenure_days, na.rm = TRUE),  # Median age
+            sd_tenure = sd(tenure_days, na.rm = TRUE),  # Standard deviation of age
+            .groups = "drop")
+
+# View the summary statistics
+print(summary_stats)
+print(summary_stats_gender_race)
+```
+IN work group 165, median and mean trnure is significantly higher for black males but for workgroup 171, Hispanic females have high tenures.
+
+### Creating Advice Networks 
+
+The goal here was to create nodes and network data then visualize for each platform. To do this, we will first split the daaset into two and from that create an edges dataset from each work group and pass that into a graph dataframe
+
+```{}
+# Step 1: Preprocessing applications data
+# Filter applications data for relevant workgroup
+workgroup1 <- "165"
+workgroup2 <- "171"
+workgroup1_data <- app_subset %>% filter(workgroup == workgroup1)
+workgroup2_data <- app_subset %>% filter(workgroup == workgroup2)
+
+# Create nodes for department1
+nodes_workgroup1 <- workgroup1_data %>%
+  select(examiner_id, gender, race, tenure_days) %>%
+  rename(node = examiner_id)
+
+# Create nodes for department2
+nodes_workgroup2 <- workgroup2_data %>%
+  select(examiner_id, gender, race, tenure_days) %>%
+  rename(node = examiner_id)
+
+# Step 2: Preprocessing edges data
+# Assuming your edges data frame is named 'edges'
+
+# Filter edges data for relevant departments
+edges_workgroup1 <- edges %>%
+  filter(ego_examiner_id %in% workgroup1_data$examiner_id)
+edges_workgroup2 <- edges %>%
+  filter(ego_examiner_id %in% workgroup2_data$examiner_id)
+
+
+# Create graph for department1
+graph_165 <- graph_from_data_frame(edges_workgroup1, vertices = nodes_workgroup1, directed = FALSE)
+
+# Create graph for department2
+graph_171 <- graph_from_data_frame(edges_workgroup2, vertices = nodes_workgroup2, directed = FALSE)
+```
+
+##Looking at some centrality Measures
+
+```{}
+# Compute betweenness centrality for department1
+betweenness_165 <- betweenness(graph_165, directed = FALSE)
+
+# Compute closeness centrality for department1
+closeness_165 <- closeness(graph_165, normalized = TRUE)
+
+# Compute degree centrality for department1
+degree_165 <- degree(graph_165)
+
+# Combine centrality measures with node attributes
+nodes_workgroup1$betweenness <- betweenness_165
+nodes_workgroup1$closeness <- closeness_165
+nodes_workgroup1$degree <- degree_165
+
+# Repeat the above steps for department2
+betweenness_171 <- betweenness(graph_171, directed = FALSE)
+closeness_171 <- closeness(graph_171, normalized = TRUE)
+degree_171 <- degree(graph_171)
+nodes_workgroup2$betweenness <- betweenness_171
+nodes_workgroup2$closeness <- closeness_171
+nodes_workgroup2$degree <- degree_171
+
+# Print top 5 nodes for department1
+cat("Top 5 nodes for department1 based on betweenness centrality:\n")
+top_betweenness_165 <- head(nodes_workgroup1[order(-nodes_workgroup1$betweenness), ], 5)
+print(top_betweenness_165[, c("examiner_id", "gender", "race", "betweenness")])
+
+cat("\nTop 5 nodes for department1 based on closeness centrality:\n")
+top_closeness_165 <- head(nodes_workgroup1[order(-nodes_workgroup1$closeness), ], 5)
+print(top_closeness_165[, c("examiner_id", "gender", "race", "closeness")])
+
+cat("\nTop 5 nodes for department1 based on degree centrality:\n")
+top_degree_165 <- head(nodes_workgroup1[order(-nodes_workgroup1$degree), ], 5)
+print(top_degree_165[, c("examiner_id", "gender", "race", "degree")])
+
+# Repeat for department2
+cat("\nTop 5 nodes for department2 based on betweenness centrality:\n")
+top_betweenness_171 <- head(nodes_workgroup2[order(-nodes_workgroup2$betweenness), ], 5)
+print(top_betweenness_171[, c("examiner_id", "gender", "race", "betweenness")])
+
+cat("\nTop 5 nodes for department2 based on closeness centrality:\n")
+top_closeness_171 <- head(nodes_workgroup2[order(-nodes_workgroup2$closeness), ], 5)
+print(top_closeness_171[, c("examiner_id", "gender", "race", "closeness")])
+
+cat("\nTop 5 nodes for department2 based on degree centrality:\n")
+top_degree_171 <- head(nodes_workgroup2[order(-nodes_workgroup2$degree), ], 5)
+print(top_degree_171[, c("examiner_id", "gender", "race", "degree")])
+
+```
