@@ -1,0 +1,247 @@
+---
+title: "ex4-ona"
+author: "Jessica Quansah"
+date: "2024-04-09"
+output:
+  pdf_document: default
+  md_document: default
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidygraph)
+library(igraph)
+library(readr)
+library(ggraph)
+library(igraph)
+library(ggplot2)
+library(dplyr)
+```
+
+## Load the data
+
+The dataset will be loaded fromt he cleaned dataset from exercise 3
+which would have the gender, race and tenure days already added
+
+```{r cars}
+data_path = "~/GitHub/desktop-tutorial/Exercise-3/"
+edges <- read_csv(paste0(data_path,"edges.csv"))
+applications <- read_csv(paste0(data_path,"cleaned_applications.csv"))
+```
+
+## Creating the application Processing Time
+
+We will now create a variable that shows the processing times of each
+application. To do this, I first take out all the pending applications
+because those have no date in either filing or issue date. Then I create
+a decision date which pulls the patent issue date if the patent was
+issued or abandon date if the patent was abadoned . The application
+processing date is created by finding the difference between the filing
+date and the decision date.
+
+I will then subset the data collecting only the variables I feel will be
+necessary for the model moving forward and for that I decided on:
+
+-gender -race -tenure days -application processing time disposal type
+
+At the end I remove any missing values
+
+```{r subset}
+applications <- applications[applications$disposal_type != "PEN", ]
+app_subset <- subset(applications, disposal_type %in% c("ISS", "ABN"))
+
+#create application processing time which if disposal type is iss (filing - issue date), and abn (filing - abandon date)
+app_subset$decision_date <- ifelse(app_subset$disposal_type == "ISS", app_subset$patent_issue_date,
+                             ifelse(app_subset$disposal_type == "ABN", app_subset$abandon_date, NA))
+
+app_subset$app_proc_time <- as.numeric(difftime(as.Date(app_subset$decision_date), 
+                                                as.Date(app_subset$filing_date),
+                                                units = "days"))
+
+app_subset<-app_subset%>%
+  select(application_number, examiner_id, gender, race, tenure_days, app_proc_time, disposal_type)
+
+# Count NA values per column
+count_missing <- colSums(is.na(app_subset))
+print(count_missing)
+
+app_subset<-drop_na(app_subset)
+```
+
+**Other Checks**
+
+From here, I just wanted to take a look at some statistics to check the
+data. I noticed that there were some negative values in the dataset so I
+dropped those. - Note: I counted the number of missing values and it was
+only 35 rows so it should not be a problem
+
+```{r check}
+#How many have a negative value - Why would I have a negative value
+summaryd<-summary(app_subset)
+print(summaryd)
+
+#Drop negative values from app_proc_time
+app_subset <- app_subset[app_subset$app_proc_time >= 0, ]
+
+```
+
+**Creating Edges Dataset and computing centrality measures**
+
+Here edges dataset is created based on applcaitions that are still in
+the original dataset. Betweenness, Closeness and Degree Centrality are
+also computed and uploaded into a centrality dataframe. This should
+enable us to merge with the application dataset in the next step
+
+```{r graph}
+#Create edges dataset
+edges<- edges %>%
+  filter(application_number %in% app_subset$application_number)
+colnames(edges)[3:4] <- c("from", "to")
+#edges<-edges%>%
+#  select(from, to)
+edges<-na.omit(edges)  #Remove NA values
+edges <- edges[, c("from", "to", setdiff(names(edges), c("from", "to")))]
+
+g <- graph_from_data_frame(edges, directed = TRUE)
+degree <- degree(g)                        # Degree centrality
+closeness <- closeness(g)                  # Closeness centrality
+betweenness <- betweenness(g)              # Betweeness Centrality
+
+#Creation of 
+centrality <- data.frame(examiner_id    = V(g)$name,
+                         degree      = degree,
+                         closeness   = closeness,
+                         betweenness = betweenness)
+
+```
+
+**Merging and Cleaning**
+
+The centrality datasets created before were then merged with my
+application dataset created from before on examiner id. After I checked
+for any missing values. I also created dummy variables for the model
+that will be created in the next step
+
+```{r merged}
+#Merge centralities with app_subset
+merged_data <- merge(app_subset, centrality, by= "examiner_id")
+
+
+# Count NA values per column
+count_missing <- colSums(is.na(merged_data))
+print(count_missing)
+
+
+#Regression
+#Dummy variables
+merged_data$gender= as.factor(merged_data$gender)
+merged_data$race= as.factor(merged_data$race)
+
+merged_data<-drop_na(merged_data)
+
+```
+
+**Building Model**
+
+Here I first start with a model with all the centrality measures and
+tenure days and disposal type.
+
+```{r Model-1}
+reg1 <- lm(app_proc_time ~ gender+betweenness+closeness+degree+tenure_days+disposal_type, data=merged_data)
+summary(reg1)
+```
+
+The output of this tells us there is a positive relationship between
+betweenness centrality and how long one's application takes. It is
+however a small positive relationship but statistically. There is
+however a negative relationship between closeness and degree centrality
+and the application processing time. The R-squared for this model is
+however really low meaning that it most likely does not explain the
+variation in the data. I tried carious variations of this but this was
+the highest. Despite all of them being almost 0.
+
+###Including Interaction Variable The next step was to include the
+interaction variable on gender so this was done iteratively for each
+centrality measure. The results however does not change much either on
+the R-squared or on the relationship between the variables.
+INterestingly when the interaction is included on all the centrality
+measureness betweenness centrality is no longer a significant
+relationship
+
+```{r Model-2}
+reg2 <- lm(app_proc_time ~ gender*betweenness+closeness+degree+tenure_days+disposal_type, data=merged_data)
+summary(reg2)
+
+reg3 <- lm(app_proc_time ~ betweenness+gender*closeness+degree+tenure_days+disposal_type, data=merged_data)
+summary(reg3)
+
+reg4 <- lm(app_proc_time ~ betweenness+closeness+gender*degree+tenure_days+disposal_type, data=merged_data)
+summary(reg3)
+
+reg5 <- lm(app_proc_time ~ gender*betweenness + gender*closeness + gender*degree +tenure_days, data=merged_data)
+summary(reg5)
+```
+
+### Interpreting Results
+
+The model suggest significant relationships between the centrality
+measures and the application processing times. Intutively these make
+sense. Higher degree centrality implies you are more connected in the
+network and as such that could mean you can easily reach the right
+people to debug any issues you may have while reviewing the applcation.
+
+The coefficient associated with betweenness centrality indicates the
+effect of a reviewer's position in the advisory network on the
+processing time of patent applications. A higher betweenness centrality
+suggests that the reviewer serves as a bridge between other reviewers in
+the network. The positive coefficient implies that applications reviewed
+by individuals with higher betweenness centrality tend to have longer
+processing times. This could be because these reviewers are involved in
+a larger number of advisory interactions, which might lead to delays in
+decision-making or coordination issues.
+
+Degree: The coefficient associated with degree centrality reflects the
+effect of a reviewer's overall connectivity in the advisory network on
+the processing time of patent applications. A higher degree centrality
+indicates that the reviewer is connected to more other reviewers in the
+network. The negative coefficient suggests that applications reviewed by
+reviewers with higher connectivity tend to have shorter processing
+times. This could be because well-connected reviewers might have better
+access to resources, information, or expertise, leading to more
+efficient reviews.
+
+Closeness: The coefficient associated with closeness centrality
+indicates the effect of a reviewer's average distance to other reviewers
+in the advisory network on the processing time of patent applications. A
+higher closeness centrality suggests that the reviewer is closer to
+other reviewers in terms of advisory interactions. The negative
+coefficient implies that applications reviewed by reviewers with higher
+closeness centrality tend to have shorter processing times. This could
+be because closer proximity facilitates faster communication,
+coordination, and decision-making among reviewers.
+
+Gender: The coefficient associated with gender indicates the effect of
+reviewer gender on the processing time of patent applications. The
+coefficient for gendermale suggests that male reviewers tend to have
+longer processing times compared to female reviewers. However, it's
+important to interpret this result cautiously and consider potential
+confounding factors or biases in the review process.
+
+Tenure Days: The coefficient associated with tenure days reflects the
+effect of reviewer tenure (length of service) on the processing time of
+patent applications. The negative coefficient implies that longer tenure
+is associated with shorter processing times. This could be because more
+experienced reviewers might have better knowledge, skills, and
+efficiency in the review process.
+
+Interaction Term: The coefficient associated with the interaction
+between gender and closeness (gendermale:closeness) indicates whether
+the effect of closeness centrality on processing time varies depending
+on the reviewer's gender. The negative coefficient suggests that the
+effect of closeness centrality on processing time is attenuated for male
+reviewers compared to female reviewers. This interaction effect warrants
+further investigation to understand potential gender-related differences
+in the impact of network centrality on processing time.
